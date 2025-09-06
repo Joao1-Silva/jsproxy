@@ -416,15 +416,8 @@ module.exports = async (req, res) => {
     console.log('API Response status:', response.status);
     console.log('API Response data:', JSON.stringify(response.data, null, 2));
 
-    // Process the JSON response for AI consumption
-    const processedData = processForAI(response.data);
-    
-    res.json({
-      success: true,
-      originalData: response.data,
-      processedForAI: processedData,
-      timestamp: new Date().toISOString()
-    });
+    // Return the original data directly for ChatGPT and other AI systems
+    res.json(response.data);
 
   } catch (error) {
     console.error('Proxy error:', error.message);
