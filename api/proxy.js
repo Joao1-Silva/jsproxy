@@ -58,23 +58,29 @@ function processForAI(data) {
 }
 
 module.exports = async (req, res) => {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  try {
+    // Always set JSON content type first
+    res.setHeader('Content-Type', 'application/json');
+    
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      res.status(200).json({ success: true, message: 'CORS preflight handled' });
+      return;
+    }
 
-  // Check if request wants HTML (from browser) or JSON (programmatic)
-  const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
-  const isDocRequest = req.method === 'GET' && Object.keys(req.query).length === 0;
+    // Check if request wants HTML (from browser) or JSON (programmatic)
+    const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+    const isDocRequest = req.method === 'GET' && Object.keys(req.query).length === 0;
 
-  // Show documentation page for GET requests without parameters from browser
-  if (isDocRequest && acceptsHtml) {
+    // Show documentation page for GET requests without parameters from browser
+    if (isDocRequest && acceptsHtml) {
+      // Override content type for HTML documentation
+      res.setHeader('Content-Type', 'text/html');
     const host = req.headers.host || 'localhost:3000';
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const baseUrl = `${protocol}://${host}`;
@@ -350,10 +356,9 @@ module.exports = async (req, res) => {
     </html>`;
 
     res.setHeader('Content-Type', 'text/html');
-    return res.send(html);
-  }
+      return res.send(html);
+    }
 
-  try {
     console.log(`Received ${req.method} proxy request`);
     
     let response;
@@ -377,85 +382,44 @@ module.exports = async (req, res) => {
         }
       });
     } else {
-      const errorResponse = {
+      // Always return JSON for unsupported methods
+      return res.status(405).json({
         success: false,
-        error: 'Method not allowed',
+        error: 'Method not allowed. Only GET and POST are supported.',
         timestamp: new Date().toISOString()
-      };
-
-      if (acceptsHtml) {
-        const errorHtml = `
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Error - Proxy Endpoint</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-                .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                .error { color: #e74c3c; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1 class="error">❌ Error 405</h1>
-                <p><strong>Method not allowed</strong></p>
-                <p>Solo se permiten métodos GET y POST en este endpoint.</p>
-                <p>Timestamp: ${new Date().toISOString()}</p>
-                <a href="/proxy">← Volver al proxy</a> | <a href="/">Inicio</a>
-            </div>
-        </body>
-        </html>`;
-        return res.status(405).send(errorHtml);
-      }
-      
-      return res.status(405).json(errorResponse);
+      });
     }
 
     console.log('API Response status:', response.status);
     console.log('API Response data:', JSON.stringify(response.data, null, 2));
 
-    // Return the original data directly for ChatGPT and other AI systems
-    res.json(response.data);
+    // Always return JSON response with success indicator
+    res.status(200).json({
+      success: true,
+      data: response.data,
+      timestamp: new Date().toISOString()
+    });
 
   } catch (error) {
     console.error('Proxy error:', error.message);
     
+    // Always return JSON error response
     const errorResponse = {
       success: false,
-      error: error.message,
+      error: error.message || 'Internal server error',
       timestamp: new Date().toISOString()
     };
 
-    if (acceptsHtml) {
-      const errorHtml = `
-      <!DOCTYPE html>
-      <html lang="es">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Error - Proxy Endpoint</title>
-          <style>
-              body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-              .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-              .error { color: #e74c3c; }
-              .details { background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 15px 0; font-family: monospace; }
-          </style>
-      </head>
-      <body>
-          <div class="container">
-              <h1 class="error">❌ Error del Proxy</h1>
-              <p><strong>Ha ocurrido un error al procesar la solicitud:</strong></p>
-              <div class="details">${error.message}</div>
-              <p>Timestamp: ${new Date().toISOString()}</p>
-              <a href="/proxy">← Volver al proxy</a> | <a href="/">Inicio</a>
-          </div>
-      </body>
-      </html>`;
-      return res.status(500).send(errorHtml);
+    // Determine appropriate status code based on error type
+    let statusCode = 500;
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      statusCode = 503; // Service Unavailable
+      errorResponse.error = 'External API is currently unavailable';
+    } else if (error.response) {
+      statusCode = error.response.status || 500;
+      errorResponse.error = `External API error: ${error.response.statusText || error.message}`;
     }
     
-    res.status(500).json(errorResponse);
+    res.status(statusCode).json(errorResponse);
   }
 };
