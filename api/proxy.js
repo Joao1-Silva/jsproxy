@@ -54,19 +54,29 @@ module.exports = async (req, res) => {
     console.log('API Response status:', response.status);
     console.log('API Response data received from external API');
 
-    // Generate unique filename with timestamp
-    const timestamp = Date.now();
-    const filename = `api-data-${timestamp}.json`;
+    // Store the data in a global variable for access via /proxy/data.json
+    global.cachedApiData = {
+      data: response.data,
+      timestamp: new Date().toISOString()
+    };
 
-    // Set headers to trigger file download
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    // Set headers for browser display
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
 
-    // Send the JSON data as a downloadable file
-    return res.status(200).send(JSON.stringify(response.data, null, 2));
+    // Generate the data.json URL
+    const host = req.headers.host || 'localhost:3000';
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const dataUrl = `${protocol}://${host}/proxy/data.json`;
+
+    // Return a response with the URL to the JSON data
+    return res.status(200).json({
+      success: true,
+      message: 'Data fetched successfully',
+      dataUrl: dataUrl,
+      timestamp: global.cachedApiData.timestamp,
+      instructions: 'Access the JSON data directly at the dataUrl'
+    });
 
   } catch (error) {
     console.error('Proxy error:', error.message);

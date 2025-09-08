@@ -2,6 +2,10 @@
   "version": 2,
   "routes": [
     {
+      "src": "/proxy/data.json",
+      "dest": "/api/proxy/data.json"
+    },
+    {
       "src": "/proxy",
       "dest": "/api/proxy"
     },
