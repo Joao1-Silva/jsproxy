@@ -60,23 +60,14 @@ module.exports = async (req, res) => {
       timestamp: new Date().toISOString()
     };
 
-    // Set headers for browser display
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache');
-
-    // Generate the data.json URL
+    // Generate the data.json URL for redirection
     const host = req.headers.host || 'localhost:3000';
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const dataUrl = `${protocol}://${host}/proxy/data.json`;
 
-    // Return a response with the URL to the JSON data
-    return res.status(200).json({
-      success: true,
-      message: 'Data fetched successfully',
-      dataUrl: dataUrl,
-      timestamp: global.cachedApiData.timestamp,
-      instructions: 'Access the JSON data directly at the dataUrl'
-    });
+    // Redirect automatically to /proxy/data.json
+    res.setHeader('Location', dataUrl);
+    return res.status(302).end();
 
   } catch (error) {
     console.error('Proxy error:', error.message);
