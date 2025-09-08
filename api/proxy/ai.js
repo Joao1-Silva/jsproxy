@@ -210,55 +210,79 @@ module.exports = async (req, res) => {
                 <div class="info-grid">
                     <div class="info-card">
                         <h4>📊 Total Registros</h4>
-                        <p>${apiData.estadisticas_generales?.total_registros || 'N/A'}</p>
+                        <p>${apiData.metadata?.total_registros || apiData.estadisticas_generales?.total_registros || 'N/A'}</p>
                     </div>
                     <div class="info-card">
                         <h4>🕒 Última Actualización</h4>
-                        <p>${apiData.metadata?.timestamp || new Date().toISOString()}</p>
+                        <p>${new Date(apiData.metadata?.timestamp || new Date()).toLocaleString('es-ES')}</p>
                     </div>
                     <div class="info-card">
                         <h4>🏭 Fuente</h4>
-                        <p>${apiData.metadata?.fuente || 'API Aguilera'}</p>
+                        <p>${apiData.metadata?.fuente || 'API Aguilera - Sistema de monitoreo industrial'}</p>
                     </div>
                     <div class="info-card">
-                        <h4>📈 Estado</h4>
-                        <p>Activo</p>
+                        <h4>📈 Descripción</h4>
+                        <p>${apiData.metadata?.descripcion || 'Base de datos completa del sistema HMI'}</p>
                     </div>
                 </div>
 
                 <button class="refresh-btn" onclick="window.location.reload()">🔄 Actualizar Datos</button>
 
-                ${apiData.estadisticas_generales ? `
                 <div class="section">
-                    <h3>📊 Estadísticas Generales</h3>
+                    <h3>📊 Estadísticas Generales de Mediciones</h3>
+                    ${apiData.estadisticas_generales ? `
                     <div class="stats-grid">
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.temperatura_promedio?.toFixed(1) || 'N/A'}°C</div>
+                            <div class="stat-value">${apiData.estadisticas_generales.total_registros || 'N/A'}</div>
+                            <div class="stat-label">Total de Registros</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${apiData.estadisticas_generales.temperatura_promedio ? apiData.estadisticas_generales.temperatura_promedio.toFixed(2) + '°C' : 'N/A'}</div>
                             <div class="stat-label">Temperatura Promedio</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.caudal_bruto_promedio?.toFixed(1) || 'N/A'}</div>
+                            <div class="stat-value">${apiData.estadisticas_generales.caudal_bruto_promedio ? apiData.estadisticas_generales.caudal_bruto_promedio.toFixed(2) : 'N/A'}</div>
                             <div class="stat-label">Caudal Bruto Promedio</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.densidad_promedio?.toFixed(3) || 'N/A'}</div>
+                            <div class="stat-value">${apiData.estadisticas_generales.densidad_promedio ? apiData.estadisticas_generales.densidad_promedio.toFixed(4) : 'N/A'}</div>
                             <div class="stat-label">Densidad Promedio</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.bsw_promedio?.toFixed(1) || 'N/A'}%</div>
+                            <div class="stat-value">${apiData.estadisticas_generales.bsw_promedio ? apiData.estadisticas_generales.bsw_promedio.toFixed(2) + '%' : 'N/A'}</div>
                             <div class="stat-label">BSW Promedio</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.temperatura_maxima?.toFixed(1) || 'N/A'}°C</div>
+                            <div class="stat-value">${apiData.estadisticas_generales.drive_gain_gas_promedio ? apiData.estadisticas_generales.drive_gain_gas_promedio.toFixed(2) : 'N/A'}</div>
+                            <div class="stat-label">Drive Gain Gas Promedio</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${apiData.estadisticas_generales.temperatura_maxima ? apiData.estadisticas_generales.temperatura_maxima.toFixed(2) + '°C' : 'N/A'}</div>
                             <div class="stat-label">Temperatura Máxima</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.temperatura_minima?.toFixed(1) || 'N/A'}°C</div>
+                            <div class="stat-value">${apiData.estadisticas_generales.temperatura_minima ? apiData.estadisticas_generales.temperatura_minima.toFixed(2) + '°C' : 'N/A'}</div>
                             <div class="stat-label">Temperatura Mínima</div>
                         </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${apiData.estadisticas_generales.caudal_bruto_maximo ? apiData.estadisticas_generales.caudal_bruto_maximo.toFixed(2) : 'N/A'}</div>
+                            <div class="stat-label">Caudal Bruto Máximo</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${apiData.estadisticas_generales.caudal_bruto_minimo ? apiData.estadisticas_generales.caudal_bruto_minimo.toFixed(2) : 'N/A'}</div>
+                            <div class="stat-label">Caudal Bruto Mínimo</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${apiData.estadisticas_generales.fecha_mas_antigua ? new Date(apiData.estadisticas_generales.fecha_mas_antigua).toLocaleDateString('es-ES') : 'N/A'}</div>
+                            <div class="stat-label">Fecha Más Antigua</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${apiData.estadisticas_generales.fecha_mas_reciente ? new Date(apiData.estadisticas_generales.fecha_mas_reciente).toLocaleDateString('es-ES') : 'N/A'}</div>
+                            <div class="stat-label">Fecha Más Reciente</div>
+                        </div>
                     </div>
+                    ` : '<p>No hay estadísticas disponibles</p>'}
                 </div>
-                ` : ''}
 
                 <div class="section">
                     <h3>🏗️ Estructura de la Base de Datos</h3>
@@ -276,10 +300,52 @@ module.exports = async (req, res) => {
                 </div>
 
                 <div class="section">
-                    <h3>💾 Muestra de Datos Completos (Primeros 3 registros)</h3>
-                    <div class="json-display">${JSON.stringify((apiData.datos_completos || []).slice(0, 3), null, 2)}</div>
-                    ${apiData.datos_completos && apiData.datos_completos.length > 3 ? 
-                        `<p><strong>... y ${apiData.datos_completos.length - 3} registros más</strong></p>` : ''}
+                    <h3>💾 Registros de Mediciones (Últimos 5 registros)</h3>
+                    ${apiData.datos_completos && apiData.datos_completos.length > 0 ? `
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 0.9em;">
+                            <thead>
+                                <tr style="background: #34495e; color: white;">
+                                    <th style="padding: 10px; border: 1px solid #ddd;">ID</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Fecha Creación</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Temp °C</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Q Bruto</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Densidad</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">BSW %</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Q Net Oil</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Drive Gain Gas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${apiData.datos_completos.slice(0, 5).map(registro => `
+                                <tr style="background: ${apiData.datos_completos.indexOf(registro) % 2 === 0 ? '#f8f9fa' : 'white'};">
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.id || 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.fecha_creacion ? new Date(registro.fecha_creacion).toLocaleString('es-ES') : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.temp_1 ? registro.temp_1.toFixed(2) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.q_bruto_1 ? registro.q_bruto_1.toFixed(2) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.densidad_1 ? registro.densidad_1.toFixed(4) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.bsw_1 ? registro.bsw_1.toFixed(2) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.q_net_oil_1 ? registro.q_net_oil_1.toFixed(2) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.driv_gain_gas_1 ? registro.driv_gain_gas_1.toFixed(2) : 'N/A'}</td>
+                                </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p><strong>Total de registros en la base de datos: ${apiData.datos_completos.length}</strong></p>
+                    ` : '<p>No hay datos de mediciones disponibles</p>'}
+                </div>
+
+                <div class="section">
+                    <h3>📋 Estructura JSON Completa</h3>
+                    <p>Vista previa de la estructura completa que recibe la IA:</p>
+                    <div class="json-display">${JSON.stringify({
+                        metadata: apiData.metadata || {},
+                        estructura_tabla: (apiData.estructura_tabla || []).slice(0, 3),
+                        estadisticas_generales: apiData.estadisticas_generales || {},
+                        datos_completos: `[${(apiData.datos_completos || []).length} registros]`,
+                        campos_descripcion: apiData.campos_descripcion || {}
+                    }, null, 2)}</div>
                 </div>
 
                 <div class="section">
