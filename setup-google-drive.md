@@ -1,55 +1,44 @@
 # Google Drive Setup Instructions
 
-## 🔧 Initial Setup Required
+## ✅ Service Account Setup Complete
 
-Before the backup system can work, you need to complete the Google Drive OAuth2 setup:
+The backup system is now configured with Service Account authentication using the provided credentials.
 
-### Step 1: Get Authorization URL
-```bash
-curl "http://localhost:3000/backup?setup=auth"
-```
+### Current Configuration:
+- **Service Account**: `jsproxy@corded-pivot-443015-a5.iam.gserviceaccount.com`
+- **Credentials File**: `credentials.json` (already created)
+- **Authentication**: Service Account (no OAuth2 setup needed)
 
-This will return a Google authorization URL. Visit this URL in your browser.
+### Required: Set Google Drive Folder ID
 
-### Step 2: Authorize Application
-1. Visit the authorization URL from Step 1
-2. Sign in with your Google account
-3. Grant permissions to access Google Drive
-4. Copy the authorization code from the response
+You need to update the folder ID in `api/backup.js`:
 
-### Step 3: Exchange Code for Tokens
-```bash
-curl "http://localhost:3000/backup?setup=token&code=YOUR_AUTHORIZATION_CODE_HERE"
-```
-
-This will return a `refresh_token`. Copy this token.
-
-### Step 4: Update Configuration
-Edit `api/backup.js` and replace `YOUR_REFRESH_TOKEN_HERE` with the actual refresh token:
+1. **Create or find your Google Drive folder**
+2. **Get the folder ID from the URL**: `https://drive.google.com/drive/folders/FOLDER_ID_HERE`
+3. **Update the configuration**:
 
 ```javascript
-oauth2Client.setCredentials({
-  refresh_token: 'YOUR_ACTUAL_REFRESH_TOKEN_HERE'
-});
+const GOOGLE_DRIVE_CONFIG = {
+  folderId: 'YOUR_ACTUAL_FOLDER_ID_HERE', // Replace this
+  credentialsPath: path.join(__dirname, '..', 'credentials.json')
+};
 ```
 
-### Step 5: Set Google Drive Folder ID
-Replace `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms` in `api/backup.js` with your actual folder ID:
+### Important: Share Folder with Service Account
 
-```javascript
-folderId: 'YOUR_ACTUAL_FOLDER_ID_HERE'
-```
+**You must share your Google Drive folder with the service account email:**
 
-To get your folder ID:
-1. Open Google Drive in browser
-2. Navigate to your desired folder
-3. Copy the folder ID from the URL: `https://drive.google.com/drive/folders/FOLDER_ID_HERE`
+1. Open your Google Drive folder
+2. Click "Share" 
+3. Add this email: `jsproxy@corded-pivot-443015-a5.iam.gserviceaccount.com`
+4. Give it "Editor" permissions
 
 ## 🚀 Usage
 
 Once setup is complete:
 
 - **Manual backup**: `GET /backup`
+- **Test connection**: `GET /backup?test=connection`
 - **Automatic backup**: Runs every minute automatically
 - **View logs**: Check server console for backup status
 

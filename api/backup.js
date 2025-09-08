@@ -5,26 +5,17 @@ const { google } = require('googleapis');
 
 // Google Drive configuration
 const GOOGLE_DRIVE_CONFIG = {
-  clientId: '68215580371-lf12sgaa8e016pcqtoh164qc49lgocl6.apps.googleusercontent.com',
-  clientSecret: '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',
-  apiKey: 'AIzaSyDzZikcQ1Gr-1G6Bc2jd1vXx0upued-1Fk',
-  redirectUri: 'urn:ietf:wg:oauth:2.0:oob',
-  folderId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms' // Replace with your folder ID
+  folderId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms', // Replace with your actual folder ID
+  credentialsPath: path.join(__dirname, '..', 'credentials.json')
 };
 
-// OAuth2 setup
-const oauth2Client = new google.auth.OAuth2(
-  GOOGLE_DRIVE_CONFIG.clientId,
-  GOOGLE_DRIVE_CONFIG.clientSecret,
-  GOOGLE_DRIVE_CONFIG.redirectUri
-);
-
-// Set credentials (you'll need to get refresh token first)
-oauth2Client.setCredentials({
-  refresh_token: 'YOUR_REFRESH_TOKEN_HERE' // You'll need to generate this
+// Service Account authentication
+const auth = new google.auth.GoogleAuth({
+  keyFile: GOOGLE_DRIVE_CONFIG.credentialsPath,
+  scopes: ['https://www.googleapis.com/auth/drive.file']
 });
 
-const drive = google.drive({ version: 'v3', auth: oauth2Client });
+const drive = google.drive({ version: 'v3', auth });
 
 // Local file path
 const DATA_FILE_PATH = path.join(__dirname, '..', 'data.json');
@@ -166,28 +157,19 @@ async function performBackup() {
 }
 
 /**
- * Initialize OAuth2 (run this once to get refresh token)
+ * Test Google Drive connection
  */
-function getAuthUrl() {
-  const scopes = ['https://www.googleapis.com/auth/drive.file'];
-  const url = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: scopes
-  });
-  return url;
-}
-
-/**
- * Exchange authorization code for tokens (run this once)
- */
-async function getTokens(code) {
+async function testGoogleDriveConnection() {
   try {
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
-    console.log('Refresh Token:', tokens.refresh_token);
-    return tokens;
+    const authClient = await auth.getClient();
+    const response = await drive.files.list({
+      pageSize: 1,
+      fields: 'files(id, name)'
+    });
+    console.log('✅ Google Drive connection successful');
+    return true;
   } catch (error) {
-    console.error('Error getting tokens:', error.message);
+    console.error('❌ Google Drive connection failed:', error.message);
     throw error;
   }
 }
@@ -213,25 +195,22 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Check for setup mode
-    if (req.query.setup === 'auth') {
-      const authUrl = getAuthUrl();
-      return res.json({
-        success: true,
-        message: 'Visit this URL to authorize the application',
-        authUrl: authUrl,
-        instructions: 'After authorization, call /backup?setup=token&code=YOUR_CODE'
-      });
-    }
-
-    if (req.query.setup === 'token' && req.query.code) {
-      const tokens = await getTokens(req.query.code);
-      return res.json({
-        success: true,
-        message: 'Tokens obtained successfully',
-        refreshToken: tokens.refresh_token,
-        instructions: 'Update the refresh_token in the code with this value'
-      });
+    // Check for test mode
+    if (req.query.test === 'connection') {
+      try {
+        await testGoogleDriveConnection();
+        return res.json({
+          success: true,
+          message: 'Google Drive connection test successful',
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          error: 'Google Drive connection test failed: ' + error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
 
     // Perform backup
@@ -255,5 +234,4 @@ module.exports = async (req, res) => {
 
 // Export functions for timer use
 module.exports.performBackup = performBackup;
-module.exports.getAuthUrl = getAuthUrl;
-module.exports.getTokens = getTokens;
+module.exports.testGoogleDriveConnection = testGoogleDriveConnection;
