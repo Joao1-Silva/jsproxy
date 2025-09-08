@@ -54,8 +54,19 @@ module.exports = async (req, res) => {
     console.log('API Response status:', response.status);
     console.log('API Response data received from external API');
 
-    // Return the JSON data directly from the external API
-    return res.status(200).json(response.data);
+    // Generate unique filename with timestamp
+    const timestamp = Date.now();
+    const filename = `api-data-${timestamp}.json`;
+
+    // Set headers to trigger file download
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    // Send the JSON data as a downloadable file
+    return res.status(200).send(JSON.stringify(response.data, null, 2));
 
   } catch (error) {
     console.error('Proxy error:', error.message);
