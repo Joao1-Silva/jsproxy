@@ -190,13 +190,14 @@ module.exports = async (req, res) => {
               
               <div class="endpoint">
                   <h3><span class="method get">GET</span><span class="method post">POST</span>/proxy</h3>
-                  <p><strong>Descripción:</strong> Endpoint principal del proxy que redirige requests a la API externa y procesa las respuestas para consumo de IA.</p>
+                  <p><strong>Descripción:</strong> Endpoint principal del proxy que redirige requests a la API externa <code>api-sermaca.lat/api_aguilera/api/ai-data</code> y retorna directamente el JSON de la respuesta.</p>
                   <p><strong>Ejemplo GET:</strong></p>
-                  <div class="example">${baseUrl}/proxy?query=ejemplo&limit=10</div>
+                  <div class="example">${baseUrl}/proxy</div>
                   <p><strong>Ejemplo POST:</strong></p>
                   <div class="example">curl -X POST "${baseUrl}/proxy" \\
   -H "Content-Type: application/json" \\
-  -d '{"query": "buscar datos", "limit": 5}'</div>
+  -d '{}'</div>
+                  <p><strong>Respuesta:</strong> Retorna directamente el JSON completo de la API externa con toda la información de la base de datos HMI.</p>
               </div>
 
               <div class="endpoint">
@@ -215,21 +216,32 @@ module.exports = async (req, res) => {
 
               <h2>📊 Estructura de Respuesta del Proxy</h2>
               <div class="example">{
-  "success": true,
-  "originalData": { /* Datos originales de la API */ },
-  "processedForAI": {
-    "messageCount": 3,
-    "messages": [
-      {
-        "id": 1,
-        "content": "contenido procesado",
-        "timestamp": "2025-01-06T20:29:11.000Z",
-        "type": "message"
-      }
-    ],
-    "summary": "Found 3 messages from the API"
+  "metadata": {
+    "timestamp": "2025-01-08T13:45:40.000Z",
+    "total_registros": 1250,
+    "descripcion": "Base de datos completa del sistema HMI para análisis de IA",
+    "fuente": "API Aguilera - Sistema de monitoreo industrial"
   },
-  "timestamp": "2025-01-06T20:29:11.000Z"
+  "estructura_tabla": [...],
+  "estadisticas_generales": {
+    "total_registros": 1250,
+    "fecha_mas_antigua": "2024-01-01T00:00:00.000Z",
+    "fecha_mas_reciente": "2025-01-08T13:45:40.000Z",
+    "temperatura_promedio": 85.5,
+    "drive_gain_gas_promedio": 12.3,
+    "caudal_bruto_promedio": 150.7,
+    "densidad_promedio": 0.85,
+    "bsw_promedio": 2.1
+  },
+  "datos_completos": [...],
+  "campos_descripcion": {
+    "id": "Identificador único autoincremental",
+    "fecha_creacion": "Timestamp de cuando se insertó el registro",
+    "temp_1": "Temperatura",
+    "q_bruto_1": "Caudal bruto",
+    "densidad_1": "Densidad del fluido",
+    "bsw_1": "Basic Sediment and Water"
+  }
 }</div>
           </div>
 
