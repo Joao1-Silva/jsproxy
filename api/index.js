@@ -190,14 +190,26 @@ module.exports = async (req, res) => {
               
               <div class="endpoint">
                   <h3><span class="method get">GET</span><span class="method post">POST</span>/proxy</h3>
-                  <p><strong>Descripción:</strong> Endpoint principal del proxy que redirige requests a la API externa <code>api-sermaca.lat/api_aguilera/api/ai-data</code> y retorna directamente el JSON de la respuesta.</p>
-                  <p><strong>Ejemplo GET:</strong></p>
-                  <div class="example">${baseUrl}/proxy</div>
-                  <p><strong>Ejemplo POST:</strong></p>
-                  <div class="example">curl -X POST "${baseUrl}/proxy" \\
-  -H "Content-Type: application/json" \\
-  -d '{}'</div>
-                  <p><strong>Respuesta:</strong> Retorna directamente el JSON completo de la API externa con toda la información de la base de datos HMI.</p>
+                  <p><strong>Descripción:</strong> Endpoint principal que obtiene datos de la API externa y redirige automáticamente a <code>/proxy/data.json</code> para mostrar el JSON en el navegador.</p>
+                  <p><strong>Ejemplo:</strong></p>
+                  <div class="example"><a href="/proxy" target="_blank">${baseUrl}/proxy</a></div>
+                  <p><strong>Comportamiento:</strong> Redirige automáticamente a <code>/proxy/data.json</code> con datos actualizados.</p>
+              </div>
+
+              <div class="endpoint">
+                  <h3><span class="method get">GET</span>/proxy/data.json</h3>
+                  <p><strong>Descripción:</strong> Muestra el JSON completo de la API externa directamente en el navegador con datos frescos.</p>
+                  <p><strong>Ejemplo:</strong></p>
+                  <div class="example"><a href="/proxy/data.json" target="_blank">${baseUrl}/proxy/data.json</a></div>
+                  <p><strong>Respuesta:</strong> JSON completo con metadata, estadísticas, estructura de tabla y todos los registros de mediciones.</p>
+              </div>
+
+              <div class="endpoint">
+                  <h3><span class="method get">GET</span>/proxy/ai</h3>
+                  <p><strong>Descripción:</strong> Visualización HTML atractiva de los datos de la API externa con estadísticas, tablas y estructura JSON completa.</p>
+                  <p><strong>Ejemplo:</strong></p>
+                  <div class="example"><a href="/proxy/ai" target="_blank">${baseUrl}/proxy/ai</a></div>
+                  <p><strong>Características:</strong> Dashboard visual con estadísticas en tiempo real, tabla de registros y JSON completo navegable.</p>
               </div>
 
               <div class="endpoint">
@@ -209,7 +221,7 @@ module.exports = async (req, res) => {
 
               <div class="endpoint">
                   <h3><span class="method get">GET</span>/</h3>
-                  <p><strong>Descripción:</strong> Esta página de documentación con información del API.</p>
+                  <p><strong>Descripción:</strong> Esta página de documentación con información completa del API.</p>
                   <p><strong>URL:</strong></p>
                   <div class="example">${baseUrl}/</div>
               </div>
@@ -248,8 +260,9 @@ module.exports = async (req, res) => {
           <div class="footer">
               <p>🔗 <strong>Enlaces útiles:</strong> 
                  <a href="/health">Health Check</a> | 
-                 <a href="/proxy?test=true">Test Proxy</a> |
-                 <a href="https://github.com" target="_blank">GitHub</a>
+                 <a href="/proxy">🔄 Proxy (Redirige a JSON)</a> |
+                 <a href="/proxy/data.json">📄 JSON Directo</a> |
+                 <a href="/proxy/ai">🤖 Visualización IA</a>
               </p>
               <p>Desarrollado para el ecosistema Vercel</p>
           </div>
