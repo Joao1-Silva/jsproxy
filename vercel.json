@@ -2,6 +2,10 @@
   "version": 2,
   "routes": [
     {
+      "src": "/backup",
+      "dest": "/api/backup"
+    },
+    {
       "src": "/proxy/ai",
       "dest": "/api/proxy/ai"
     },

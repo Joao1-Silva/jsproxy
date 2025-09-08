@@ -5,15 +5,27 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Import API routes
+const proxyRoutes = require('./api/proxy');
+const healthRoutes = require('./api/health');
+const indexRoutes = require('./api/index');
+const backupHandler = require('./api/backup');
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Routes
+app.get('/backup', backupHandler);
+app.use('/proxy', proxyRoutes);
+app.use('/health', healthRoutes);
+app.use('/', indexRoutes);
 
 // API endpoint configuration
 const API_BASE_URL = 'http://api-sermaca.lat/api_aguilera/api/ai-data';
 
 // Proxy endpoint
-app.get('/proxy', async (req, res) => {
+proxyRoutes.get('/proxy', async (req, res) => {
   try {
     console.log('Received proxy request with query params:', req.query);
     
@@ -162,11 +174,18 @@ app.get('/', (req, res) => {
   });
 });
 
+// Start backup timer
+require('./backup-timer');
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Proxy server running on port ${PORT}`);
   console.log(`📡 Proxying requests to: ${API_BASE_URL}`);
   console.log(`🔗 Access at: http://localhost:${PORT}`);
+  console.log(`📋 Available endpoints:`);
+  console.log(`   GET /backup - Manual backup trigger`);
+  console.log(`   GET /backup?setup=auth - Get Google Drive auth URL`);
+  console.log(`   GET /backup?setup=token&code=CODE - Exchange auth code for tokens`);
 });
 
 module.exports = app;
