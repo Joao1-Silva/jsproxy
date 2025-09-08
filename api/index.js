@@ -1,3 +1,8 @@
+const axios = require('axios');
+
+// API endpoint configuration
+const API_BASE_URL = 'http://api-sermaca.lat/api_aguilera/api/ai-data';
+
 module.exports = async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -34,6 +39,18 @@ module.exports = async (req, res) => {
     </body>
     </html>`;
     return res.status(405).send(errorHtml);
+  }
+
+  // Fetch real data from external API
+  let realApiData = null;
+  try {
+    console.log('Fetching real data from external API for index page');
+    const response = await axios.get(API_BASE_URL, { timeout: 5000 });
+    realApiData = response.data;
+    console.log('Real API data fetched successfully for index');
+  } catch (error) {
+    console.error('Error fetching real data for index:', error.message);
+    // Continue with fallback example data if API fails
   }
 
   const host = req.headers.host || 'localhost:3000';
@@ -227,6 +244,11 @@ module.exports = async (req, res) => {
               </div>
 
               <h2>📊 Estructura de Respuesta del Proxy</h2>
+              ${realApiData ? `
+              <p><strong>Datos reales completos obtenidos de la API externa:</strong></p>
+              <div class="example">${JSON.stringify(realApiData, null, 2)}</div>
+              ` : `
+              <p><strong>Ejemplo de estructura (API externa no disponible):</strong></p>
               <div class="example">{
   "metadata": {
     "timestamp": "2025-01-08T13:45:40.000Z",
@@ -255,6 +277,7 @@ module.exports = async (req, res) => {
     "bsw_1": "Basic Sediment and Water"
   }
 }</div>
+              `}
           </div>
 
           <div class="footer">
