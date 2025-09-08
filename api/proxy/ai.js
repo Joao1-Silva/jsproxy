@@ -338,14 +338,8 @@ module.exports = async (req, res) => {
 
                 <div class="section">
                     <h3>📋 Estructura JSON Completa</h3>
-                    <p>Vista previa de la estructura completa que recibe la IA:</p>
-                    <div class="json-display">${JSON.stringify({
-                        metadata: apiData.metadata || {},
-                        estructura_tabla: (apiData.estructura_tabla || []).slice(0, 3),
-                        estadisticas_generales: apiData.estadisticas_generales || {},
-                        datos_completos: `[${(apiData.datos_completos || []).length} registros]`,
-                        campos_descripcion: apiData.campos_descripcion || {}
-                    }, null, 2)}</div>
+                    <p>JSON completo que envía la API externa:</p>
+                    <div class="json-display" style="max-height: 600px; overflow-y: auto;">${JSON.stringify(apiData, null, 2)}</div>
                 </div>
 
                 <div class="section">
