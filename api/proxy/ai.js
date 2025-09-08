@@ -237,39 +237,39 @@ module.exports = async (req, res) => {
                             <div class="stat-label">Total de Registros</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.temperatura_promedio ? apiData.estadisticas_generales.temperatura_promedio.toFixed(2) + '°C' : 'N/A'}</div>
+                            <div class="stat-value">${(apiData.estadisticas_generales.temperatura_promedio && typeof apiData.estadisticas_generales.temperatura_promedio === 'number') ? apiData.estadisticas_generales.temperatura_promedio.toFixed(2) + '°C' : 'N/A'}</div>
                             <div class="stat-label">Temperatura Promedio</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.caudal_bruto_promedio ? apiData.estadisticas_generales.caudal_bruto_promedio.toFixed(2) : 'N/A'}</div>
+                            <div class="stat-value">${(apiData.estadisticas_generales.caudal_bruto_promedio && typeof apiData.estadisticas_generales.caudal_bruto_promedio === 'number') ? apiData.estadisticas_generales.caudal_bruto_promedio.toFixed(2) : 'N/A'}</div>
                             <div class="stat-label">Caudal Bruto Promedio</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.densidad_promedio ? apiData.estadisticas_generales.densidad_promedio.toFixed(4) : 'N/A'}</div>
+                            <div class="stat-value">${(apiData.estadisticas_generales.densidad_promedio && typeof apiData.estadisticas_generales.densidad_promedio === 'number') ? apiData.estadisticas_generales.densidad_promedio.toFixed(4) : 'N/A'}</div>
                             <div class="stat-label">Densidad Promedio</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.bsw_promedio ? apiData.estadisticas_generales.bsw_promedio.toFixed(2) + '%' : 'N/A'}</div>
+                            <div class="stat-value">${(apiData.estadisticas_generales.bsw_promedio && typeof apiData.estadisticas_generales.bsw_promedio === 'number') ? apiData.estadisticas_generales.bsw_promedio.toFixed(2) + '%' : 'N/A'}</div>
                             <div class="stat-label">BSW Promedio</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.drive_gain_gas_promedio ? apiData.estadisticas_generales.drive_gain_gas_promedio.toFixed(2) : 'N/A'}</div>
+                            <div class="stat-value">${(apiData.estadisticas_generales.drive_gain_gas_promedio && typeof apiData.estadisticas_generales.drive_gain_gas_promedio === 'number') ? apiData.estadisticas_generales.drive_gain_gas_promedio.toFixed(2) : 'N/A'}</div>
                             <div class="stat-label">Drive Gain Gas Promedio</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.temperatura_maxima ? apiData.estadisticas_generales.temperatura_maxima.toFixed(2) + '°C' : 'N/A'}</div>
+                            <div class="stat-value">${(apiData.estadisticas_generales.temperatura_maxima && typeof apiData.estadisticas_generales.temperatura_maxima === 'number') ? apiData.estadisticas_generales.temperatura_maxima.toFixed(2) + '°C' : 'N/A'}</div>
                             <div class="stat-label">Temperatura Máxima</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.temperatura_minima ? apiData.estadisticas_generales.temperatura_minima.toFixed(2) + '°C' : 'N/A'}</div>
+                            <div class="stat-value">${(apiData.estadisticas_generales.temperatura_minima && typeof apiData.estadisticas_generales.temperatura_minima === 'number') ? apiData.estadisticas_generales.temperatura_minima.toFixed(2) + '°C' : 'N/A'}</div>
                             <div class="stat-label">Temperatura Mínima</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.caudal_bruto_maximo ? apiData.estadisticas_generales.caudal_bruto_maximo.toFixed(2) : 'N/A'}</div>
+                            <div class="stat-value">${(apiData.estadisticas_generales.caudal_bruto_maximo && typeof apiData.estadisticas_generales.caudal_bruto_maximo === 'number') ? apiData.estadisticas_generales.caudal_bruto_maximo.toFixed(2) : 'N/A'}</div>
                             <div class="stat-label">Caudal Bruto Máximo</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${apiData.estadisticas_generales.caudal_bruto_minimo ? apiData.estadisticas_generales.caudal_bruto_minimo.toFixed(2) : 'N/A'}</div>
+                            <div class="stat-value">${(apiData.estadisticas_generales.caudal_bruto_minimo && typeof apiData.estadisticas_generales.caudal_bruto_minimo === 'number') ? apiData.estadisticas_generales.caudal_bruto_minimo.toFixed(2) : 'N/A'}</div>
                             <div class="stat-label">Caudal Bruto Mínimo</div>
                         </div>
                         <div class="stat-item">
@@ -321,12 +321,12 @@ module.exports = async (req, res) => {
                                 <tr style="background: ${apiData.datos_completos.indexOf(registro) % 2 === 0 ? '#f8f9fa' : 'white'};">
                                     <td style="padding: 8px; border: 1px solid #ddd;">${registro.id || 'N/A'}</td>
                                     <td style="padding: 8px; border: 1px solid #ddd;">${registro.fecha_creacion ? new Date(registro.fecha_creacion).toLocaleString('es-ES') : 'N/A'}</td>
-                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.temp_1 ? registro.temp_1.toFixed(2) : 'N/A'}</td>
-                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.q_bruto_1 ? registro.q_bruto_1.toFixed(2) : 'N/A'}</td>
-                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.densidad_1 ? registro.densidad_1.toFixed(4) : 'N/A'}</td>
-                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.bsw_1 ? registro.bsw_1.toFixed(2) : 'N/A'}</td>
-                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.q_net_oil_1 ? registro.q_net_oil_1.toFixed(2) : 'N/A'}</td>
-                                    <td style="padding: 8px; border: 1px solid #ddd;">${registro.driv_gain_gas_1 ? registro.driv_gain_gas_1.toFixed(2) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${(registro.temp_1 && typeof registro.temp_1 === 'number') ? registro.temp_1.toFixed(2) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${(registro.q_bruto_1 && typeof registro.q_bruto_1 === 'number') ? registro.q_bruto_1.toFixed(2) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${(registro.densidad_1 && typeof registro.densidad_1 === 'number') ? registro.densidad_1.toFixed(4) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${(registro.bsw_1 && typeof registro.bsw_1 === 'number') ? registro.bsw_1.toFixed(2) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${(registro.q_net_oil_1 && typeof registro.q_net_oil_1 === 'number') ? registro.q_net_oil_1.toFixed(2) : 'N/A'}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${(registro.driv_gain_gas_1 && typeof registro.driv_gain_gas_1 === 'number') ? registro.driv_gain_gas_1.toFixed(2) : 'N/A'}</td>
                                 </tr>
                                 `).join('')}
                             </tbody>
