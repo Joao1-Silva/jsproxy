@@ -5,7 +5,7 @@ const { google } = require('googleapis');
 
 // Google Drive configuration
 const GOOGLE_DRIVE_CONFIG = {
-  folderId: 'root', // Use root folder or specify your folder ID
+  folderId: '1iTXbYmxpfFpaycAiKwZdlEqHhqKF2OBG', // Use root folder or specify your folder ID
   credentialsPath: path.join(__dirname, '..', 'google.json')
 };
 

@@ -6,7 +6,7 @@ The backup system is now configured with Service Account authentication using th
 
 ### Current Configuration:
 - **Service Account**: `jsproxy@corded-pivot-443015-a5.iam.gserviceaccount.com`
-- **Credentials File**: `credentials.json` (already created)
+- **Credentials File**: `google.json` (already created)
 - **Authentication**: Service Account (no OAuth2 setup needed)
 
 ### Required: Set Google Drive Folder ID
