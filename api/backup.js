@@ -146,29 +146,36 @@ async function findFileInDrive(drive, fileName, folderId) {
   return res.data.files?.[0] || null;
 }
 
+
+// --- PATCH: use streams for uploads to avoid 'part.body.pipe is not a function' ---
+const { Readable } = require('stream');
+
 async function createOrUpdateJson(drive, filePath, folderId) {
   const baseName = path.basename(filePath);
   const existing = await findFileInDrive(drive, baseName, folderId);
 
   const content = formatJsonForUpload(fs.readFileSync(filePath, 'utf8'));
+  const bodyStream = Readable.from([content], { objectMode: false });
 
   if (existing) {
-    // update
+    // update (multipart: requestBody + media)
     const updated = await drive.files.update({
       fileId: existing.id,
-      media: { mimeType: 'application/json', body: Buffer.from(content, 'utf8') },
+      requestBody: { name: baseName, mimeType: 'application/json' },
+      media: { mimeType: 'application/json', body: bodyStream },
+      fields: 'id, name, modifiedTime',
     });
     return { action: 'updated', fileId: updated.data.id };
   } else {
-    // create
+    // create (multipart: requestBody + media)
     const created = await drive.files.create({
       requestBody: {
         name: baseName,
         mimeType: 'application/json',
         parents: [folderId],
       },
-      media: { mimeType: 'application/json', body: Buffer.from(content, 'utf8') },
-      fields: 'id, name',
+      media: { mimeType: 'application/json', body: bodyStream },
+      fields: 'id, name, createdTime',
     });
     return { action: 'created', fileId: created.data.id };
   }
