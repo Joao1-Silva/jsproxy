@@ -9,10 +9,17 @@ const GOOGLE_DRIVE_CONFIG = {
   credentialsPath: path.join(__dirname, '..', 'google.json')
 };
 
-// Service Account authentication
+// Service Account authentication - use credentials directly to avoid file path issues
+let credentials;
+try {
+  credentials = require(GOOGLE_DRIVE_CONFIG.credentialsPath);
+} catch (error) {
+  console.error('❌ Error loading credentials:', error.message);
+}
+
 const auth = new google.auth.GoogleAuth({
-  keyFile: GOOGLE_DRIVE_CONFIG.credentialsPath,
-  scopes: ['https://www.googleapis.com/auth/drive.file']
+  credentials: credentials,
+  scopes: ['https://www.googleapis.com/auth/drive']
 });
 
 const drive = google.drive({ version: 'v3', auth });
@@ -76,8 +83,15 @@ async function saveLocalFile(data) {
  */
 async function findFileInDrive() {
   try {
+    let query;
+    if (GOOGLE_DRIVE_CONFIG.folderId === 'root') {
+      query = `name='data.json' and 'root' in parents and trashed=false`;
+    } else {
+      query = `name='data.json' and parents in '${GOOGLE_DRIVE_CONFIG.folderId}' and trashed=false`;
+    }
+    
     const response = await drive.files.list({
-      q: `name='data.json' and parents in '${GOOGLE_DRIVE_CONFIG.folderId}' and trashed=false`,
+      q: query,
       fields: 'files(id, name)'
     });
     
@@ -96,9 +110,13 @@ async function uploadToGoogleDriveDirectly(data) {
     console.log('Uploading new file to Google Drive...');
     
     const fileMetadata = {
-      name: 'data.json',
-      parents: [GOOGLE_DRIVE_CONFIG.folderId]
+      name: 'data.json'
     };
+    
+    // Only add parents if not root folder
+    if (GOOGLE_DRIVE_CONFIG.folderId !== 'root') {
+      fileMetadata.parents = [GOOGLE_DRIVE_CONFIG.folderId];
+    }
 
     const media = {
       mimeType: 'application/json',
