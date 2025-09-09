@@ -63,6 +63,10 @@ const DATA_PATH = process.env.DATA_PATH || path.resolve(process.cwd(), 'data.jso
 const DATA_DIR = process.env.DATA_DIR || process.cwd();
 const PORT = Number(process.env.PORT) || 3000;
 
+const DRIVE_FILE_ID = process.env.GOOGLE_DRIVE_FILE_ID || undefined; // opcional: apunta a un archivo específico
+const REQUIRE_EXISTING_FILE = String(process.env.REQUIRE_EXISTING_FILE || 'false').toLowerCase() === 'true';
+
+
 // ---- Utilidades de credenciales ----
 function normalizePrivateKey(key) {
   if (!key) return key;
@@ -179,27 +183,46 @@ async function findFileInDrive(drive, fileName, folderId) {
 
 
 // --- PATCH: use streams for uploads to avoid 'part.body.pipe is not a function' ---
+
 const { Readable } = require('stream');
 
 async function createOrUpdateJson(drive, filePath, folderId) {
   const baseName = path.basename(filePath);
-  const existing = await findFileInDrive(drive, baseName, folderId);
-
   const content = formatJsonForUpload(fs.readFileSync(filePath, 'utf8'));
   const bodyStream = Readable.from([content], { objectMode: false });
 
+  // Ruta directa por ID (evita creación; útil en Mi unidad con SA)
+  if (DRIVE_FILE_ID) {
+    const updated = await drive.files.update({
+      fileId: DRIVE_FILE_ID,
+      requestBody: { name: baseName, mimeType: 'application/json' },
+      media: { mimeType: 'application/json', body: bodyStream },
+      fields: 'id, name, modifiedTime',
+      supportsAllDrives: true,
+    });
+    return { action: 'updated', fileId: updated.data.id };
+  }
+
+  // Ruta estándar por nombre + carpeta
+  const existing = await findFileInDrive(drive, baseName, folderId);
+
   if (existing) {
-    // update (multipart: requestBody + media)
-    const updated = await drive.files.update({ supportsAllDrives: true,
+    const updated = await drive.files.update({
       fileId: existing.id,
       requestBody: { name: baseName, mimeType: 'application/json' },
       media: { mimeType: 'application/json', body: bodyStream },
       fields: 'id, name, modifiedTime',
+      supportsAllDrives: true,
     });
     return { action: 'updated', fileId: updated.data.id };
   } else {
-    // create (multipart: requestBody + media)
-    const created = await drive.files.create({ supportsAllDrives: true,
+    if (REQUIRE_EXISTING_FILE) {
+      const err = new Error(`Archivo no encontrado en la carpeta destino y REQUIRE_EXISTING_FILE=true: ${baseName}`);
+      err.code = 404;
+      throw err;
+    }
+    // create (esto fallará en Mi unidad con SA; sólo funciona en Shared Drives u OAuth)
+    const created = await drive.files.create({
       requestBody: {
         name: baseName,
         mimeType: 'application/json',
@@ -207,6 +230,7 @@ async function createOrUpdateJson(drive, filePath, folderId) {
       },
       media: { mimeType: 'application/json', body: bodyStream },
       fields: 'id, name, createdTime',
+      supportsAllDrives: true,
     });
     return { action: 'created', fileId: created.data.id };
   }
@@ -260,9 +284,11 @@ app.get('/backup', async (req, res) => {
 
   // Validar ubicación de carpeta
   try {
-    const v = await validateFolderLocation(client.drive, folderId);
-    if (client.mode === 'service_account' && !v.isSharedDrive) {
-      return res.status(403).json({ success: false, error: 'La carpeta destino NO está en una Unidad compartida. Los Service Accounts no tienen cuota en "Mi unidad". Usa una Shared Drive o cambia a OAuth2.', folderMeta: v.meta, hint: ['Crea una Unidad compartida y agrega el Service Account como Content manager', 'O usa OAuth2 (CLIENT_ID/SECRET/REFRESH_TOKEN) para subir a tu Mi unidad', 'Opcional: habilita Domain-Wide Delegation y usa GOOGLE_IMPERSONATE_EMAIL'] });
+    if (!DRIVE_FILE_ID) {
+      const v = await validateFolderLocation(client.drive, folderId);
+      if (client.mode === 'service_account' && !v.isSharedDrive) {
+        return res.status(403).json({ success: false, error: 'La carpeta destino NO está en una Unidad compartida. Los Service Accounts no tienen cuota en "Mi unidad". Usa una Shared Drive o cambia a OAuth2, o define GOOGLE_DRIVE_FILE_ID para actualizar un archivo existente compartido contigo.', folderMeta: v.meta, hint: ['Crea una Unidad compartida y agrega el Service Account como Content manager', 'O usa OAuth2 (CLIENT_ID/SECRET/REFRESH_TOKEN) para subir a tu Mi unidad', 'O pre‑crea el archivo y comparte con el Service Account; define GOOGLE_DRIVE_FILE_ID para actualizarlo'] });
+      }
     }
   } catch (e) {
     return respondAuthError(res, e, '/backup(validateFolder)');
