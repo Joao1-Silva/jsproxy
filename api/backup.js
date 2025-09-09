@@ -9,7 +9,7 @@ const GOOGLE_DRIVE_CONFIG = {
   credentialsPath: path.join(__dirname, '..', 'google.json')
 };
 
-// Service Account authentication - use credentials directly to avoid file path issues
+// Service Account authentication using JWT with client_email and private_key
 let credentials;
 try {
   credentials = require(GOOGLE_DRIVE_CONFIG.credentialsPath);
@@ -17,12 +17,15 @@ try {
   console.error('❌ Error loading credentials:', error.message);
 }
 
-const auth = new google.auth.GoogleAuth({
-  credentials: credentials,
+// Create JWT client with specific credentials
+const { JWT } = require('google-auth-library');
+const jwtClient = new JWT({
+  email: credentials.client_email,
+  key: credentials.private_key,
   scopes: ['https://www.googleapis.com/auth/drive']
 });
 
-const drive = google.drive({ version: 'v3', auth });
+const drive = google.drive({ version: 'v3', auth: jwtClient });
 
 // Local file path - use /tmp for serverless environments like Vercel
 const DATA_FILE_PATH = process.env.VERCEL ? '/tmp/data.json' : path.join(__dirname, '..', 'data.json');
@@ -195,12 +198,13 @@ async function performBackup() {
  */
 async function testGoogleDriveConnection() {
   try {
-    const authClient = await auth.getClient();
+    await jwtClient.authorize();
     const response = await drive.files.list({
       pageSize: 1,
       fields: 'files(id, name)'
     });
     console.log('✅ Google Drive connection successful');
+    console.log('✅ Using JWT with client_email:', credentials.client_email);
     return true;
   } catch (error) {
     console.error('❌ Google Drive connection failed:', error.message);
