@@ -1,0 +1,8 @@
+{
+  "test": true,
+  "message": "Test data for backup system",
+  "timestamp": "2025-01-09T13:01:32.000Z",
+  "data": {
+    "example": "This is test data to verify the backup system works correctly"
+  }
+}
