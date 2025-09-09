@@ -206,7 +206,7 @@ module.exports = async (req, res) => {
                   </div>
                   <div class="info-item">
                       <h4>📦 Versión</h4>
-                      <p>4.6.0</p>
+                      <p>4.8.2</p>
                   </div>
                   <div class="info-item">
                       <h4>⏰ Timestamp</h4>

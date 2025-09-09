@@ -5,7 +5,7 @@ const { google } = require('googleapis');
 
 // Google Drive configuration
 const GOOGLE_DRIVE_CONFIG = {
-  folderId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms', // Replace with your actual folder ID
+  folderId: 'root', // Use root folder or specify your folder ID
   credentialsPath: path.join(__dirname, '..', 'google.json')
 };
 
@@ -26,13 +26,33 @@ const DATA_FILE_PATH = path.join(__dirname, '..', 'data.json');
 async function fetchProxyData() {
   try {
     console.log('Fetching data from /proxy endpoint...');
-    const response = await axios.get('http://localhost:3000/proxy/data.json', {
-      timeout: 30000
-    });
-    console.log('✅ Data fetched successfully from proxy');
-    return response.data;
+    
+    // Try different possible endpoints
+    const endpoints = [
+      'https://jsproxyflax.vercel.app/proxy/data.json',
+      'https://jsproxyflax.vercel.app/proxy',
+      'http://api-sermaca.lat/api_aguilera/api/ai-data'
+    ];
+    
+    let lastError;
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`Trying endpoint: ${endpoint}`);
+        const response = await axios.get(endpoint, {
+          timeout: 30000
+        });
+        console.log('✅ Data fetched successfully from:', endpoint);
+        return response.data;
+      } catch (error) {
+        console.log(`❌ Failed to fetch from ${endpoint}:`, error.message);
+        lastError = error;
+        continue;
+      }
+    }
+    
+    throw lastError;
   } catch (error) {
-    console.error('❌ Error fetching data from proxy:', error.message);
+    console.error('❌ Error fetching data from all endpoints:', error.message);
     throw error;
   }
 }
