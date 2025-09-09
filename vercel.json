@@ -29,10 +29,6 @@
   "functions": {
     "api/**/*.js": {
       "maxDuration": 10
-    },
-    "api/*.js": { "runtime": "nodejs20.x" }
-  },
-  "crons": [
-    { "path": "/api/backup/cron/backup", "schedule": "* * * * *" }
-  ]
+    }
+  }
 }
