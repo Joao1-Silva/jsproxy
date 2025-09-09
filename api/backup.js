@@ -186,6 +186,56 @@ async function findFileInDrive(drive, fileName, folderId) {
 
 const { Readable } = require('stream');
 
+// Nueva función para subir JSON directamente desde memoria (sin archivo local)
+async function createOrUpdateJsonFromMemory(drive, jsonData, fileName, folderId) {
+  const content = formatJsonForUpload(JSON.stringify(jsonData, null, 2));
+  const bodyStream = Readable.from([content], { objectMode: false });
+
+  // Ruta directa por ID (evita creación; útil en Mi unidad con SA)
+  if (DRIVE_FILE_ID) {
+    const updated = await drive.files.update({
+      fileId: DRIVE_FILE_ID,
+      requestBody: { name: fileName, mimeType: 'application/json' },
+      media: { mimeType: 'application/json', body: bodyStream },
+      fields: 'id, name, modifiedTime',
+      supportsAllDrives: true,
+    });
+    return { action: 'updated', fileId: updated.data.id };
+  }
+
+  // Ruta estándar por nombre + carpeta
+  const existing = await findFileInDrive(drive, fileName, folderId);
+
+  if (existing) {
+    const updated = await drive.files.update({
+      fileId: existing.id,
+      requestBody: { name: fileName, mimeType: 'application/json' },
+      media: { mimeType: 'application/json', body: bodyStream },
+      fields: 'id, name, modifiedTime',
+      supportsAllDrives: true,
+    });
+    return { action: 'updated', fileId: updated.data.id };
+  } else {
+    if (REQUIRE_EXISTING_FILE) {
+      const err = new Error(`Archivo no encontrado en la carpeta destino y REQUIRE_EXISTING_FILE=true: ${fileName}`);
+      err.code = 404;
+      throw err;
+    }
+    // create (esto fallará en Mi unidad con SA; sólo funciona en Shared Drives u OAuth)
+    const created = await drive.files.create({
+      requestBody: {
+        name: fileName,
+        mimeType: 'application/json',
+        parents: [folderId],
+      },
+      media: { mimeType: 'application/json', body: bodyStream },
+      fields: 'id, name, createdTime',
+      supportsAllDrives: true,
+    });
+    return { action: 'created', fileId: created.data.id };
+  }
+}
+
 async function createOrUpdateJson(drive, filePath, folderId) {
   const baseName = path.basename(filePath);
   const content = formatJsonForUpload(fs.readFileSync(filePath, 'utf8'));
@@ -493,6 +543,94 @@ app.get('/debug/file', async (req, res) => {
     return res.json({ success: true, fileId, meta: meta.data, auth_mode: client.mode });
   } catch (e) {
     return respondAuthError(res, e, '/debug/file');
+  }
+});
+
+// Nuevo endpoint: obtener JSON del /proxy y subirlo a Google Drive
+app.get('/backup/proxy', async (req, res) => {
+  const folderId = GOOGLE_DRIVE_CONFIG.folderId;
+  const forceFileId = !!DRIVE_FILE_ID;
+  
+  if (!folderId && !forceFileId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Falta GOOGLE_DRIVE_FOLDER_ID o GOOGLE_DRIVE_FILE_ID',
+    });
+  }
+
+  let client;
+  try {
+    client = await getDriveClient();
+  } catch (error) {
+    return respondAuthError(res, error, '/backup/proxy(auth)');
+  }
+
+  // Validar ubicación de carpeta (omite si forzamos update por ID)
+  try {
+    if (!forceFileId) {
+      const v = await validateFolderLocation(client.drive, folderId);
+      if (client.mode === 'service_account' && !v.isSharedDrive) {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'La carpeta destino NO está en una Unidad compartida. Los Service Accounts no tienen cuota en "Mi unidad". Usa una Shared Drive o cambia a OAuth2, o define GOOGLE_DRIVE_FILE_ID para actualizar un archivo existente compartido contigo.', 
+          folderMeta: v.meta, 
+          hint: ['Crea una Unidad compartida y agrega el Service Account como Content manager', 'O usa OAuth2 (CLIENT_ID/SECRET/REFRESH_TOKEN) para subir a tu Mi unidad', 'O pre‑crea el archivo y comparte con el Service Account; define GOOGLE_DRIVE_FILE_ID para actualizarlo'] 
+        });
+      }
+    }
+  } catch (e) {
+    return respondAuthError(res, e, '/backup/proxy(validateFolder)');
+  }
+
+  try {
+    // Obtener datos del endpoint /proxy/data.json interno
+    const host = req.headers.host || 'localhost:3000';
+    const protocol = req.headers['x-forwarded-proto'] || (host.includes('localhost') ? 'http' : 'https');
+    const proxyUrl = `${protocol}://${host}/api/proxy/data.json`;
+    
+    console.log(`[backup/proxy] Fetching data from: ${proxyUrl}`);
+    
+    const axios = require('axios');
+    const proxyResponse = await axios.get(proxyUrl, {
+      timeout: 15000,
+      headers: {
+        'User-Agent': 'backup-proxy-internal'
+      }
+    });
+
+    const jsonData = proxyResponse.data;
+    const fileName = req.query.filename || 'proxy-data.json';
+
+    // Subir JSON directamente a Google Drive desde memoria
+    const result = await createOrUpdateJsonFromMemory(client.drive, jsonData, fileName, folderId);
+    
+    return res.json({
+      success: true,
+      message: 'JSON del /proxy subido exitosamente a Google Drive',
+      file: fileName,
+      action: result.action,
+      fileId: result.fileId,
+      folderId,
+      auth_mode: client.mode,
+      as: client.who,
+      source: 'proxy-data',
+      timestamp: new Date().toISOString(),
+      recordCount: jsonData.datos_completos?.length || 'N/A'
+    });
+
+  } catch (error) {
+    console.error('[backup/proxy] Error:', error.message);
+    
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      return res.status(503).json({
+        success: false,
+        error: 'No se pudo conectar al endpoint /proxy/data.json',
+        details: error.message,
+        hint: 'Verifica que el servidor esté ejecutándose y el endpoint /proxy/data.json esté disponible'
+      });
+    }
+    
+    return respondAuthError(res, error, '/backup/proxy');
   }
 });
 
