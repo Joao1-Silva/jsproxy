@@ -268,6 +268,7 @@ app.get('/health', (_req, res) => {
 
 app.get('/backup', async (req, res) => {
   const folderId = GOOGLE_DRIVE_CONFIG.folderId;
+  const forceFileId = !!DRIVE_FILE_ID;
   if (!folderId) {
     return res.status(400).json({
       success: false,
@@ -282,9 +283,9 @@ app.get('/backup', async (req, res) => {
     return respondAuthError(res, error, '/backup(auth)');
   }
 
-  // Validar ubicación de carpeta
+  // Validar ubicación de carpeta (omite si forzamos update por ID)
   try {
-    if (!DRIVE_FILE_ID) {
+    if (!forceFileId) {
       const v = await validateFolderLocation(client.drive, folderId);
       if (client.mode === 'service_account' && !v.isSharedDrive) {
         return res.status(403).json({ success: false, error: 'La carpeta destino NO está en una Unidad compartida. Los Service Accounts no tienen cuota en "Mi unidad". Usa una Shared Drive o cambia a OAuth2, o define GOOGLE_DRIVE_FILE_ID para actualizar un archivo existente compartido contigo.', folderMeta: v.meta, hint: ['Crea una Unidad compartida y agrega el Service Account como Content manager', 'O usa OAuth2 (CLIENT_ID/SECRET/REFRESH_TOKEN) para subir a tu Mi unidad', 'O pre‑crea el archivo y comparte con el Service Account; define GOOGLE_DRIVE_FILE_ID para actualizarlo'] });
@@ -296,6 +297,9 @@ app.get('/backup', async (req, res) => {
 
   // ?test=connection
   if (String(req.query.test || '').toLowerCase() === 'connection') {
+    if (forceFileId) {
+      return res.json({ success: true, message: 'OK (modo update por GOOGLE_DRIVE_FILE_ID)', fileId: DRIVE_FILE_ID, note: 'No se valida carpeta al forzar update por ID.' });
+    }
     try {
       await testGoogleDriveConnection(client.drive, folderId);
       return res.json({
@@ -334,6 +338,7 @@ app.get('/backup', async (req, res) => {
 
 app.get('/backup/bulk', async (_req, res) => {
   const folderId = GOOGLE_DRIVE_CONFIG.folderId;
+  const forceFileId = !!DRIVE_FILE_ID;
   if (!folderId) {
     return res.status(400).json({
       success: false,
@@ -451,6 +456,43 @@ app.get('/debug/folder', async (req, res) => {
     return res.json({ success: true, folderId, meta, auth_mode: client.mode });
   } catch (e) {
     return respondAuthError(res, e, '/debug/folder');
+  }
+});
+
+
+app.get('/debug/env', (_req, res) => {
+  res.json({
+    success: true,
+    env_detected: {
+      has_service_account_json: !!process.env.GOOGLE_CREDENTIALS_JSON,
+      has_service_account_pair: !!(process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY),
+      has_oauth2: !!(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET && process.env.GOOGLE_OAUTH_REFRESH_TOKEN),
+      folder_id: process.env.GOOGLE_DRIVE_FOLDER_ID || null,
+      drive_id: process.env.GOOGLE_DRIVE_ID || null,
+      file_id: process.env.GOOGLE_DRIVE_FILE_ID || null,
+      require_existing_file: String(process.env.REQUIRE_EXISTING_FILE || 'false').toLowerCase(),
+    }
+  });
+});
+
+app.get('/debug/file', async (req, res) => {
+  const fileId = req.query.id || process.env.GOOGLE_DRIVE_FILE_ID;
+  if (!fileId) return res.status(400).json({ success: false, error: 'Falta id (query ?id= o GOOGLE_DRIVE_FILE_ID)' });
+  let client;
+  try {
+    client = await getDriveClient();
+  } catch (e) {
+    return respondAuthError(res, e, '/debug/file(auth)');
+  }
+  try {
+    const meta = await client.drive.files.get({
+      fileId,
+      fields: 'id, name, owners, permissions, parents, driveId, teamDriveId, mimeType, modifiedTime',
+      supportsAllDrives: true,
+    });
+    return res.json({ success: true, fileId, meta: meta.data, auth_mode: client.mode });
+  } catch (e) {
+    return respondAuthError(res, e, '/debug/file');
   }
 });
 
