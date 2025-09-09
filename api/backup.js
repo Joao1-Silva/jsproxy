@@ -143,6 +143,24 @@ async function getDriveClient() {
   return { drive, mode: 'service_account', who: sa.client_email };
 }
 
+
+// ---- Validación de carpeta destino ----
+async function getFolderMeta(drive, folderId) {
+  const res = await drive.files.get({
+    fileId: folderId,
+    fields: 'id, name, driveId, parents, owners, teamDriveId',
+    supportsAllDrives: true,
+  });
+  return res.data;
+}
+
+async function validateFolderLocation(drive, folderId) {
+  const meta = await getFolderMeta(drive, folderId);
+  // Si estamos en Service Account y NO hay driveId => es "Mi unidad" de un usuario (no sirve para SA sin DWD)
+  const isSharedDrive = !!(meta.driveId || meta.teamDriveId);
+  return { meta, isSharedDrive };
+}
+
 // ---- Utilidades Drive ----
 async function testGoogleDriveConnection(drive, folderId) {
   // simple list para probar permisos en la carpeta
@@ -240,6 +258,16 @@ app.get('/backup', async (req, res) => {
     return respondAuthError(res, error, '/backup(auth)');
   }
 
+  // Validar ubicación de carpeta
+  try {
+    const v = await validateFolderLocation(client.drive, folderId);
+    if (client.mode === 'service_account' && !v.isSharedDrive) {
+      return res.status(403).json({ success: false, error: 'La carpeta destino NO está en una Unidad compartida. Los Service Accounts no tienen cuota en "Mi unidad". Usa una Shared Drive o cambia a OAuth2.', folderMeta: v.meta, hint: ['Crea una Unidad compartida y agrega el Service Account como Content manager', 'O usa OAuth2 (CLIENT_ID/SECRET/REFRESH_TOKEN) para subir a tu Mi unidad', 'Opcional: habilita Domain-Wide Delegation y usa GOOGLE_IMPERSONATE_EMAIL'] });
+    }
+  } catch (e) {
+    return respondAuthError(res, e, '/backup(validateFolder)');
+  }
+
   // ?test=connection
   if (String(req.query.test || '').toLowerCase() === 'connection') {
     try {
@@ -294,7 +322,13 @@ app.get('/backup/bulk', async (_req, res) => {
     return respondAuthError(res, error, '/backup/bulk(auth)');
   }
 
+  // Validar ubicación también aquí
   try {
+    const v = await validateFolderLocation(client.drive, folderId);
+    if (client.mode === 'service_account' && !v.isSharedDrive) {
+      return res.status(403).json({ success: false, error: 'La carpeta destino NO está en una Unidad compartida. Los Service Accounts no tienen cuota en "Mi unidad". Usa una Shared Drive o cambia a OAuth2.', folderMeta: v.meta });
+    }
+
     const files = fs
       .readdirSync(DATA_DIR, { withFileTypes: true })
       .filter((d) => d.isFile() && d.name.toLowerCase().endswith('.json'))
@@ -376,6 +410,23 @@ function buildInvalidGrantHint(raw) {
 
   return hints;
 }
+
+
+app.get('/debug/folder', async (req, res) => {
+  const folderId = req.query.id || GOOGLE_DRIVE_CONFIG.folderId;
+  let client;
+  try {
+    client = await getDriveClient();
+  } catch (e) {
+    return respondAuthError(res, e, '/debug/folder(auth)');
+  }
+  try {
+    const meta = await getFolderMeta(client.drive, folderId);
+    return res.json({ success: true, folderId, meta, auth_mode: client.mode });
+  } catch (e) {
+    return respondAuthError(res, e, '/debug/folder');
+  }
+});
 
 // ---- Arranque ----
 app.listen(PORT, () => {
