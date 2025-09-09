@@ -2,7 +2,8 @@
 
 /**
  * backup.js — GET /backup toma el JSON de https://jsproxy-flax.vercel.app/proxy
- * y lo sube a Google Drive como data.json (o el nombre en DATA_FILE_NAME), sin leer disco.
+ * (siguiendo redirecciones) y lo sube a Google Drive como data.json (o DATA_FILE_NAME),
+ * sin leer disco local.
  *
  * Colócalo en: api/backup.js  (Vercel)
  *
@@ -41,24 +42,49 @@ const DRIVE_FILE_ID = process.env.GOOGLE_DRIVE_FILE_ID || undefined; // Update p
 const REQUIRE_EXISTING_FILE = String(process.env.REQUIRE_EXISTING_FILE || 'false').toLowerCase() === 'true';
 
 // ---- Utils ----
-function fetchJsonFromUrl(url) {
-  return new Promise(function (resolve, reject) {
-    try {
-      const client = url.startsWith('https') ? https : http;
-      const req = client.get(url, { headers: { accept: 'application/json' } }, function (res) {
-        const ok = res.statusCode >= 200 && res.statusCode < 300;
-        if (!ok) { res.resume(); return reject(new Error('HTTP ' + res.statusCode + ' al obtener ' + url)); }
+// Fetch JSON con soporte de redirecciones (301/302/303/307/308)
+function fetchJsonFromUrl(url, maxRedirects = 5) {
+  return new Promise((resolve, reject) => {
+    const visited = new Set();
+
+    function follow(u, redirects) {
+      if (redirects < 0) return reject(new Error('Demasiadas redirecciones'));
+      const client = u.startsWith('https') ? https : http;
+
+      const req = client.get(u, { headers: { accept: 'application/json' } }, (res) => {
+        const status = res.statusCode || 0;
+        const loc = res.headers && res.headers.location;
+
+        if ((status === 301 || status === 302 || status === 303 || status === 307 || status === 308) && loc) {
+          const next = new URL(loc, u).toString(); // resuelve relativas
+          if (visited.has(next)) { res.resume(); return reject(new Error('Bucle de redirección')); }
+          visited.add(next);
+          res.resume();
+          return follow(next, redirects - 1);
+        }
+
+        if (status < 200 || status >= 300) {
+          res.resume();
+          return reject(new Error('HTTP ' + status + ' desde ' + u));
+        }
+
         const chunks = [];
-        res.on('data', function (d) { chunks.push(d); });
-        res.on('end', function () {
+        res.on('data', (d) => chunks.push(d));
+        res.on('end', () => {
           try {
             const txt = Buffer.concat(chunks).toString('utf8');
-            resolve(JSON.parse(txt));
-          } catch (e) { reject(e); }
+            const json = JSON.parse(txt);
+            resolve(json);
+          } catch (_e) {
+            reject(new Error('Respuesta no es JSON válido desde ' + u));
+          }
         });
       });
+
       req.on('error', reject);
-    } catch (e) { reject(e); }
+    }
+
+    follow(url, maxRedirects);
   });
 }
 
@@ -199,7 +225,7 @@ app.get(['/backup','/api/backup'], async function (req, res) {
 
     const proxyUrl = PROXY_URL_FIXED; // Fijado al dominio solicitado
 
-    // 1) Obtener JSON de proxy.js
+    // 1) Obtener JSON de proxy.js (siguiendo redirecciones)
     const payload = await fetchJsonFromUrl(proxyUrl);
 
     // 2) Subir a Drive como data.json (o nombre custom)
@@ -267,6 +293,6 @@ if (process.env.VERCEL) {
 } else {
   app.listen(PORT, function () {
     console.log('[backup] listening on http://localhost:' + PORT);
-    console.log('[backup] GET /backup -> GET ' + PROXY_URL_FIXED + ' -> sube a Drive');
+    console.log('[backup] GET /backup -> GET ' + PROXY_URL_FIXED + ' (con redirecciones) -> sube a Drive');
   });
 }
