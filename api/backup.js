@@ -42,6 +42,23 @@ const GOOGLE_DRIVE_CONFIG = {
   folderId: process.env.GOOGLE_DRIVE_FOLDER_ID || 'REEMPLAZA_CON_FOLDER_ID',
 };
 
+
+const DRIVE_ID = process.env.GOOGLE_DRIVE_ID || undefined; // optional (Shared Drive)
+
+function commonDriveParams() {
+  // Flags obligatorios cuando trabajas con Shared Drives
+  const base = {
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  };
+  if (DRIVE_ID) {
+    base.corpora = 'drive';
+    base.driveId = DRIVE_ID;
+  }
+  return base;
+}
+
+
 const DATA_PATH = process.env.DATA_PATH || path.resolve(process.cwd(), 'data.json');
 const DATA_DIR = process.env.DATA_DIR || process.cwd();
 const PORT = Number(process.env.PORT) || 3000;
@@ -129,16 +146,12 @@ async function getDriveClient() {
 // ---- Utilidades Drive ----
 async function testGoogleDriveConnection(drive, folderId) {
   // simple list para probar permisos en la carpeta
-  await drive.files.list({
-    pageSize: 1,
-    fields: 'files(id, name)',
-    q: `'${folderId}' in parents and trashed=false`,
-  });
+  await drive.files.list({ ...commonDriveParams(), pageSize: 1, fields: 'files(id, name, parents)', q: `'${folderId}' in parents and trashed=false`, ...commonDriveParams() });
   return true;
 }
 
 async function findFileInDrive(drive, fileName, folderId) {
-  const res = await drive.files.list({
+  const res = await drive.files.list({ ...commonDriveParams(),
     q: `name='${fileName.replace(/'/g, "\\'")}' and '${folderId}' in parents and trashed=false`,
     fields: 'files(id, name)',
     pageSize: 1,
@@ -159,7 +172,7 @@ async function createOrUpdateJson(drive, filePath, folderId) {
 
   if (existing) {
     // update (multipart: requestBody + media)
-    const updated = await drive.files.update({
+    const updated = await drive.files.update({ supportsAllDrives: true,
       fileId: existing.id,
       requestBody: { name: baseName, mimeType: 'application/json' },
       media: { mimeType: 'application/json', body: bodyStream },
@@ -168,7 +181,7 @@ async function createOrUpdateJson(drive, filePath, folderId) {
     return { action: 'updated', fileId: updated.data.id };
   } else {
     // create (multipart: requestBody + media)
-    const created = await drive.files.create({
+    const created = await drive.files.create({ supportsAllDrives: true,
       requestBody: {
         name: baseName,
         mimeType: 'application/json',
