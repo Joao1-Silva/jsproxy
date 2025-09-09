@@ -17,8 +17,8 @@ const auth = new google.auth.GoogleAuth({
 
 const drive = google.drive({ version: 'v3', auth });
 
-// Local file path
-const DATA_FILE_PATH = path.join(__dirname, '..', 'data.json');
+// Local file path - use /tmp for serverless environments like Vercel
+const DATA_FILE_PATH = process.env.VERCEL ? '/tmp/data.json' : path.join(__dirname, '..', 'data.json');
 
 /**
  * Fetch data from the proxy endpoint
@@ -89,9 +89,9 @@ async function findFileInDrive() {
 }
 
 /**
- * Upload new file to Google Drive
+ * Upload new file to Google Drive directly from data
  */
-async function uploadToGoogleDrive() {
+async function uploadToGoogleDriveDirectly(data) {
   try {
     console.log('Uploading new file to Google Drive...');
     
@@ -102,7 +102,7 @@ async function uploadToGoogleDrive() {
 
     const media = {
       mimeType: 'application/json',
-      body: await fs.readFile(DATA_FILE_PATH)
+      body: JSON.stringify(data, null, 2)
     };
 
     const response = await drive.files.create({
@@ -120,15 +120,15 @@ async function uploadToGoogleDrive() {
 }
 
 /**
- * Update existing file in Google Drive
+ * Update existing file in Google Drive directly from data
  */
-async function updateGoogleDriveFile(fileId) {
+async function updateGoogleDriveFileDirectly(fileId, data) {
   try {
     console.log('Updating existing file in Google Drive...');
     
     const media = {
       mimeType: 'application/json',
-      body: await fs.readFile(DATA_FILE_PATH)
+      body: JSON.stringify(data, null, 2)
     };
 
     const response = await drive.files.update({
@@ -154,17 +154,13 @@ async function performBackup() {
     // Step 1: Fetch data from proxy
     const data = await fetchProxyData();
     
-    // Step 2: Save to local file
-    await saveLocalFile(data);
-    
-    // Step 3: Check if file exists in Google Drive
+    // Step 2: Upload directly to Google Drive without local file
     const existingFile = await findFileInDrive();
     
-    // Step 4: Upload or update in Google Drive
     if (existingFile) {
-      await updateGoogleDriveFile(existingFile.id);
+      await updateGoogleDriveFileDirectly(existingFile.id, data);
     } else {
-      await uploadToGoogleDrive();
+      await uploadToGoogleDriveDirectly(data);
     }
     
     console.log('✅ Backup process completed successfully');

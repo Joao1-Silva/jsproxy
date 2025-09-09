@@ -199,7 +199,7 @@ module.exports = async (req, res) => {
                   </div>
                   <div class="info-card">
                       <h4>🔧 Versión</h4>
-                      <p>4.8.2</p>
+                      <p>4.8.4</p>
                   </div>
               </div>
 
