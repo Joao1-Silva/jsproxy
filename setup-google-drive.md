@@ -11,7 +11,7 @@ The backup system is now configured with Service Account authentication using th
 
 ### Required: Set Google Drive Folder ID
 
-You need to update the folder ID in `api/backup.js`:
+You need to update the folder ID in `api/backup.js`:.
 
 1. **Create or find your Google Drive folder**
 2. **Get the folder ID from the URL**: `https://drive.google.com/drive/folders/FOLDER_ID_HERE`
