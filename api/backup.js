@@ -6,7 +6,7 @@ const { google } = require('googleapis');
 // Google Drive configuration
 const GOOGLE_DRIVE_CONFIG = {
   folderId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms', // Replace with your actual folder ID
-  credentialsPath: path.join(__dirname, '..', 'credentials.json')
+  credentialsPath: path.join(__dirname, '..', 'google.json')
 };
 
 // Service Account authentication
