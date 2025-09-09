@@ -1,19 +1,31 @@
-// backup.js
-// Sube/actualiza uno o varios .json locales a una carpeta de Google Drive.
-//
-// Endpoints:
-//   GET /health
-//   GET /backup?test=connection                 -> prueba de conexión
-//   GET /backup                                 -> crea/actualiza DATA_PATH (por defecto ./data.json)
-//   GET /backup?file=<archivo.json>             -> crea/actualiza ese archivo JSON del cwd o DATA_DIR
-//   GET /backup/bulk                            -> crea/actualiza TODOS los .json de DATA_DIR
-//
-// Env vars (opcional):
-//   GOOGLE_CREDENTIALS_JSON  (o GOOGLE_CLIENT_EMAIL + GOOGLE_PRIVATE_KEY)
-//   GOOGLE_DRIVE_FOLDER_ID
-//   DATA_PATH              (ruta a un .json puntual; default ./data.json)
-//   DATA_DIR               (directorio con varios .json para /backup/bulk; default ./)
-//   PORT                   (default 3000)
+
+/**
+ * backup.js (robusto)
+ * Sube/actualiza uno o varios .json locales a una carpeta de Google Drive.
+ * 
+ * Cambios clave respecto a la versión original:
+ *  - Soporta **dos** modos de autenticación: Service Account (JWT) u OAuth2 con Refresh Token.
+ *  - Normaliza las credenciales cuando llegan por variables de entorno (saltos de línea del private_key).
+ *  - Manejo de errores mejorado para `invalid_grant` con mensajes de acción concretos.
+ *  - Endpoints compatibles: /health, /backup?test=connection, /backup, /backup?file=, /backup/bulk
+ * 
+ * Variables de entorno soportadas:
+ *  Servicio (Service Account):
+ *    - GOOGLE_CREDENTIALS_JSON   (JSON completo del service account)
+ *    - ó GOOGLE_CLIENT_EMAIL + GOOGLE_PRIVATE_KEY
+ *    - (Opcional) GOOGLE_IMPERSONATE_EMAIL (si usas domain‑wide delegation)
+ * 
+ *  OAuth2 (cuenta personal):
+ *    - GOOGLE_OAUTH_CLIENT_ID
+ *    - GOOGLE_OAUTH_CLIENT_SECRET
+ *    - GOOGLE_OAUTH_REFRESH_TOKEN
+ *
+ *  Generales:
+ *    - GOOGLE_DRIVE_FOLDER_ID       (ID de carpeta destino en Drive)
+ *    - DATA_PATH  (ruta a un .json puntual; default ./data.json)
+ *    - DATA_DIR   (directorio con varios .json para /backup/bulk; default ./)
+ *    - PORT       (default 3000)
+ */
 
 require('dotenv').config();
 
@@ -21,250 +33,331 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { google } = require('googleapis');
-const { GoogleAuth } = require('google-auth-library');
+const { GoogleAuth, JWT, OAuth2Client } = require('google-auth-library');
 
 const app = express();
 
+// ---- Config ----
 const GOOGLE_DRIVE_CONFIG = {
-  folderId:
-    process.env.GOOGLE_DRIVE_FOLDER_ID ||
-    '1iTXbYmxpfFpaycAiKwZdlEqHhqKF2OBG',
-  credentialsPath: path.resolve(process.cwd(), 'google.json'),
+  folderId: process.env.GOOGLE_DRIVE_FOLDER_ID || 'REEMPLAZA_CON_FOLDER_ID',
 };
 
 const DATA_PATH = process.env.DATA_PATH || path.resolve(process.cwd(), 'data.json');
 const DATA_DIR = process.env.DATA_DIR || process.cwd();
 const PORT = Number(process.env.PORT) || 3000;
 
-// ---- Credenciales ----
-function loadCredentials() {
-  if (process.env.GOOGLE_CREDENTIALS_JSON) {
-    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
-    if (creds.private_key && !creds.private_key.includes('\n')) {
-      creds.private_key = creds.private_key.replace(/\\n/g, '\n');
-    }
-    return creds;
-  }
-  if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-    let key = process.env.GOOGLE_PRIVATE_KEY;
-    if (!key.includes('\n')) key = key.replace(/\\n/g, '\n');
-    return { client_email: process.env.GOOGLE_CLIENT_EMAIL, private_key: key };
-  }
-  const creds = require(GOOGLE_DRIVE_CONFIG.credentialsPath);
-  if (creds.private_key && !creds.private_key.includes('\n')) {
-    creds.private_key = creds.private_key.replace(/\\n/g, '\n');
-  }
-  return creds;
+// ---- Utilidades de credenciales ----
+function normalizePrivateKey(key) {
+  if (!key) return key;
+  // Soporta claves que llegan con '\n' literal
+  if (!key.includes('\n')) return key.replace(/\\n/g, '\n');
+  return key;
 }
 
-function getDriveClient() {
-  const credentials = loadCredentials();
-  const auth = new GoogleAuth({
-    credentials,
+function loadServiceAccountFromEnvOrFile() {
+  // 1) JSON completo en var de entorno
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+    if (creds.private_key) creds.private_key = normalizePrivateKey(creds.private_key);
+    return creds;
+  }
+  // 2) Par email/clave en entorno
+  if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    return {
+      type: 'service_account',
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY),
+      token_uri: 'https://oauth2.googleapis.com/token',
+    };
+  }
+  // 3) Fichero google.json si existe
+  const filePath = path.resolve(process.cwd(), 'google.json');
+  if (fs.existsSync(filePath)) {
+    const creds = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (creds.private_key) creds.private_key = normalizePrivateKey(creds.private_key);
+    return creds;
+  }
+  return null;
+}
+
+function haveOAuth2Env() {
+  return (
+    !!process.env.GOOGLE_OAUTH_CLIENT_ID &&
+    !!process.env.GOOGLE_OAUTH_CLIENT_SECRET &&
+    !!process.env.GOOGLE_OAUTH_REFRESH_TOKEN
+  );
+}
+
+// ---- Cliente de Drive ----
+async function getDriveClient() {
+  // Prioridad: OAuth2 (si está presente) -> Service Account (por defecto)
+  if (haveOAuth2Env()) {
+    const oauth2Client = new OAuth2Client({
+      clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+    });
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GOOGLE_OAUTH_REFRESH_TOKEN,
+    });
+    // Forzar acceso para detectar invalid_grant temprano
+    await oauth2Client.getAccessToken();
+    const drive = google.drive({ version: 'v3', auth: oauth2Client });
+    return { drive, mode: 'oauth2', who: 'OAuth2 (refresh token)' };
+  }
+
+  const sa = loadServiceAccountFromEnvOrFile();
+  if (!sa || !sa.client_email || !sa.private_key) {
+    throw new Error(
+      'No hay credenciales. Define OAuth2 (CLIENT_ID/SECRET/REFRESH_TOKEN) o un Service Account (GOOGLE_CREDENTIALS_JSON o GOOGLE_CLIENT_EMAIL/GOOGLE_PRIVATE_KEY).'
+    );
+  }
+
+  const jwtOptions = {
+    email: sa.client_email,
+    key: sa.private_key,
     scopes: ['https://www.googleapis.com/auth/drive'],
-  });
-  const drive = google.drive({ version: 'v3', auth });
-  return { drive, credentials };
+    subject: process.env.GOOGLE_IMPERSONATE_EMAIL || undefined, // opcional para DWD
+  };
+  const jwtClient = new JWT(jwtOptions);
+  // Valida token (detecta invalid_grant por reloj desfasado o clave rota)
+  await jwtClient.authorize();
+
+  const drive = google.drive({ version: 'v3', auth: jwtClient });
+  return { drive, mode: 'service_account', who: sa.client_email };
 }
 
 // ---- Utilidades Drive ----
-async function testGoogleDriveConnection(drive) {
+async function testGoogleDriveConnection(drive, folderId) {
+  // simple list para probar permisos en la carpeta
   await drive.files.list({
     pageSize: 1,
     fields: 'files(id, name)',
-    q: `'${GOOGLE_DRIVE_CONFIG.folderId}' in parents and trashed=false`,
+    q: `'${folderId}' in parents and trashed=false`,
   });
   return true;
 }
 
 async function findFileInDrive(drive, fileName, folderId) {
   const res = await drive.files.list({
-    q: `name='${fileName}' and '${folderId}' in parents and trashed=false`,
+    q: `name='${fileName.replace(/'/g, "\\'")}' and '${folderId}' in parents and trashed=false`,
     fields: 'files(id, name)',
     pageSize: 1,
   });
   return res.data.files?.[0] || null;
 }
 
-async function uploadOrUpdateJsonFromBuffer(drive, fileName, folderId, buffer) {
-  const file = await findFileInDrive(drive, fileName, folderId);
-  const media = { mimeType: 'application/json', body: buffer };
+async function createOrUpdateJson(drive, filePath, folderId) {
+  const baseName = path.basename(filePath);
+  const existing = await findFileInDrive(drive, baseName, folderId);
 
-  if (file) {
-    const upd = await drive.files.update({ fileId: file.id, media });
-    return { action: 'updated', fileId: upd.data.id };
+  const content = formatJsonForUpload(fs.readFileSync(filePath, 'utf8'));
+
+  if (existing) {
+    // update
+    const updated = await drive.files.update({
+      fileId: existing.id,
+      media: { mimeType: 'application/json', body: Buffer.from(content, 'utf8') },
+    });
+    return { action: 'updated', fileId: updated.data.id };
   } else {
+    // create
     const created = await drive.files.create({
-      requestBody: { name: fileName, parents: [folderId], mimeType: 'application/json' },
-      media,
-      fields: 'id',
+      requestBody: {
+        name: baseName,
+        mimeType: 'application/json',
+        parents: [folderId],
+      },
+      media: { mimeType: 'application/json', body: Buffer.from(content, 'utf8') },
+      fields: 'id, name',
     });
     return { action: 'created', fileId: created.data.id };
   }
 }
 
-// ---- Lectura de .json local ----
-function readJsonFileAsBuffer(filePath) {
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`No existe el archivo: ${filePath}`);
-  }
-  const raw = fs.readFileSync(filePath, 'utf8');
-  // Validar que sea JSON válido (pero subimos texto formateado bonito)
-  let parsed;
+// ---- Lectura/validación de JSON local ----
+function formatJsonForUpload(raw) {
+  // Valida que sea JSON válido; subimos con formato bonito para diff fácil
   try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    throw new Error(`JSON inválido: ${filePath} -> ${e.message}`);
+    const parsed = JSON.parse(raw);
+    return JSON.stringify(parsed, null, 2) + '\n';
+  } catch (err) {
+    // Si no es JSON válido, lo subimos como texto de todos modos (pero advertimos)
+    return String(raw);
   }
-  const pretty = JSON.stringify(parsed, null, 2);
-  return Buffer.from(pretty);
 }
 
-function resolveJsonPath(requestedName) {
-  // Si viene ruta absoluta, úsala; si es nombre, búscalo en DATA_DIR
-  if (!requestedName) return DATA_PATH;
-  const p = path.isAbsolute(requestedName)
-    ? requestedName
-    : path.join(DATA_DIR, requestedName);
+function resolveJsonPathFromQuery(fileQuery) {
+  // Permite file=nombre.json relativo a DATA_DIR o ruta absoluta
+  if (!fileQuery) return DATA_PATH;
+  const p = path.isAbsolute(fileQuery) ? fileQuery : path.join(DATA_DIR, fileQuery);
   return p;
 }
 
-// ---- Rutas ----
+// ---- Endpoints ----
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'backup', time: new Date().toISOString() });
+  res.json({
+    ok: true,
+    time: new Date().toISOString(),
+    dataPath: DATA_PATH,
+    dataDir: DATA_DIR,
+    folderId: GOOGLE_DRIVE_CONFIG.folderId,
+  });
 });
 
 app.get('/backup', async (req, res) => {
-  const { drive, credentials } = getDriveClient();
+  const folderId = GOOGLE_DRIVE_CONFIG.folderId;
+  if (!folderId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Falta GOOGLE_DRIVE_FOLDER_ID',
+    });
+  }
+
+  let client;
+  try {
+    client = await getDriveClient();
+  } catch (error) {
+    return respondAuthError(res, error, '/backup(auth)');
+  }
 
   // ?test=connection
   if (String(req.query.test || '').toLowerCase() === 'connection') {
     try {
-      await testGoogleDriveConnection(drive);
+      await testGoogleDriveConnection(client.drive, folderId);
       return res.json({
         success: true,
         message: 'Conexión a Google Drive OK',
-        service_account: credentials.client_email || '(sin email)',
-        folderId: GOOGLE_DRIVE_CONFIG.folderId,
+        auth_mode: client.mode,
+        as: client.who,
+        folderId,
       });
     } catch (error) {
-      const msg = error?.message || error?.errors?.[0]?.message || 'Fallo en test de conexión';
-      return res.status(500).json({
-        success: false,
-        error: msg,
-        code: error?.code,
-        details:
-          /invalid_grant|jwt|signature/i.test(msg)
-            ? 'Rotar clave del Service Account y asegurar saltos \\n en private_key.'
-            : undefined,
-        timestamp: new Date().toISOString(),
-        endpoint: '/backup?test=connection',
-      });
+      return respondAuthError(res, error, '/backup?test=connection');
     }
   }
 
   // Subir un solo archivo .json (DATA_PATH o ?file=)
   try {
-    const requested = req.query.file ? String(req.query.file) : null;
-    const filePath = resolveJsonPath(requested);
-    const buffer = readJsonFileAsBuffer(filePath);
-    const fileName = path.basename(filePath);
+    const targetPath = resolveJsonPathFromQuery(req.query.file);
+    if (!fs.existsSync(targetPath)) {
+      return res.status(404).json({ success: false, error: `No existe el archivo: ${targetPath}` });
+    }
 
-    const result = await uploadOrUpdateJsonFromBuffer(
-      drive,
-      fileName,
-      GOOGLE_DRIVE_CONFIG.folderId,
-      buffer
-    );
-
+    const result = await createOrUpdateJson(client.drive, targetPath, folderId);
     return res.json({
       success: true,
-      message: result.action === 'created' ? 'Archivo creado' : 'Archivo actualizado',
-      file: fileName,
+      file: path.basename(targetPath),
+      action: result.action,
       fileId: result.fileId,
-      folderId: GOOGLE_DRIVE_CONFIG.folderId,
-      timestamp: new Date().toISOString(),
-      endpoint: '/backup',
+      folderId,
+      auth_mode: client.mode,
+      as: client.who,
     });
   } catch (error) {
-    const msg = error?.message || error?.errors?.[0]?.message || 'Backup failed';
-    return res.status(500).json({
-      success: false,
-      error: msg,
-      code: error?.code,
-      details:
-        /invalid_grant|jwt|signature/i.test(msg)
-          ? 'Rotar clave del Service Account y asegurar saltos \\n en private_key.'
-          : undefined,
-      timestamp: new Date().toISOString(),
-      endpoint: '/backup',
-    });
+    return respondAuthError(res, error, '/backup');
   }
 });
 
-// Subir TODOS los .json de DATA_DIR
 app.get('/backup/bulk', async (_req, res) => {
-  const { drive } = getDriveClient();
-  try {
-    const entries = fs.readdirSync(DATA_DIR, { withFileTypes: true });
-    const jsonFiles = entries
-      .filter((e) => e.isFile() && e.name.toLowerCase().endsWith('.json'))
-      .map((e) => path.join(DATA_DIR, e.name));
+  const folderId = GOOGLE_DRIVE_CONFIG.folderId;
+  if (!folderId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Falta GOOGLE_DRIVE_FOLDER_ID',
+    });
+  }
 
-    if (jsonFiles.length === 0) {
-      return res.json({
-        success: true,
-        message: 'No se encontraron .json en DATA_DIR',
-        DATA_DIR,
-        results: [],
-      });
-    }
+  let client;
+  try {
+    client = await getDriveClient();
+  } catch (error) {
+    return respondAuthError(res, error, '/backup/bulk(auth)');
+  }
+
+  try {
+    const files = fs
+      .readdirSync(DATA_DIR, { withFileTypes: true })
+      .filter((d) => d.isFile() && d.name.toLowerCase().endswith('.json'))
+      .map((d) => path.join(DATA_DIR, d.name));
 
     const results = [];
-    for (const filePath of jsonFiles) {
+    for (const filePath of files) {
       try {
-        const buf = readJsonFileAsBuffer(filePath);
-        const fileName = path.basename(filePath);
-        const r = await uploadOrUpdateJsonFromBuffer(
-          drive,
-          fileName,
-          GOOGLE_DRIVE_CONFIG.folderId,
-          buf
-        );
-        results.push({
-          file: fileName,
-          status: r.action,
-          fileId: r.fileId,
-        });
+        const r = await createOrUpdateJson(client.drive, filePath, folderId);
+        results.push({ file: path.basename(filePath), ...r });
       } catch (e) {
         results.push({
           file: path.basename(filePath),
-          status: 'error',
-          error: e.message,
+          error: e?.message || String(e),
         });
       }
     }
 
-    res.json({
+    return res.json({
       success: true,
-      message: 'Procesamiento en lote completado',
-      DATA_DIR,
-      folderId: GOOGLE_DRIVE_CONFIG.folderId,
+      folderId,
+      auth_mode: client.mode,
+      as: client.who,
       results,
-      timestamp: new Date().toISOString(),
-      endpoint: '/backup/bulk',
     });
   } catch (error) {
-    const msg = error?.message || 'Bulk backup failed';
-    res.status(500).json({
-      success: false,
-      error: msg,
-      timestamp: new Date().toISOString(),
-      endpoint: '/backup/bulk',
-    });
+    return respondAuthError(res, error, '/backup/bulk');
   }
 });
 
+// ---- Manejo de errores de autenticación ----
+function respondAuthError(res, error, endpoint) {
+  const raw = extractErrMessage(error);
+  const body = {
+    success: false,
+    error: raw.message,
+    code: raw.code,
+    hint: buildInvalidGrantHint(raw),
+    endpoint,
+    timestamp: new Date().toISOString(),
+  };
+  return res.status(500).json(body);
+}
+
+function extractErrMessage(error) {
+  const msg =
+    error?.message ||
+    error?.response?.data?.error_description ||
+    error?.response?.data?.error ||
+    (error?.errors && error.errors[0]?.message) ||
+    'Error de autenticación/Google API';
+  const code = error?.code || error?.response?.status || undefined;
+  return { message: msg, code };
+}
+
+function buildInvalidGrantHint(raw) {
+  const msg = (raw?.message || '').toLowerCase();
+  if (!/invalid_grant|unauthorized_client|jwt|signature|malformed/i.test(msg)) return undefined;
+
+  // Sugerencias según el modo de auth
+  const hints = [];
+
+  if (haveOAuth2Env()) {
+    hints.push(
+      'OAuth2: Revoca y vuelve a otorgar el permiso para obtener un nuevo refresh_token.',
+      'Asegura que el "User Type" del OAuth Consent Screen no limita el refresh (Publishing status: In production).',
+      'Verifica que el refresh_token no haya sido revocado manualmente (Security > Third‑party access).',
+      'Revisa que el CLIENT_ID/CLIENT_SECRET coincidan con el proyecto donde se generó el refresh_token.',
+    );
+  } else {
+    hints.push(
+      'Service Account: rota la clave y vuelve a descargar el .json del Service Account (IAM & Admin > Service Accounts).',
+      'Coteja que private_key mantiene saltos de línea; si usas env var, reemplaza \\n por saltos reales.',
+      'Comparte la carpeta de destino en Drive con el correo del Service Account con permiso de Editor.',
+      'Si usas domain‑wide delegation, define GOOGLE_IMPERSONATE_EMAIL (usuario del dominio) y habilita el scope de Drive.',
+      'Asegura que el reloj del servidor no tiene desfasaje (>5 min) (NTP).',
+    );
+  }
+
+  return hints;
+}
+
+// ---- Arranque ----
 app.listen(PORT, () => {
   console.log(`[backup] listening on http://localhost:${PORT}`);
   console.log(`[backup] Carpeta Drive: ${GOOGLE_DRIVE_CONFIG.folderId}`);
